@@ -7,7 +7,7 @@
 # Author: Garry Morrison
 # email: garry.morrison _at_ gmail.com
 # Date: 13/4/2018
-# Update: 19/4/2018
+# Update: 21/4/2018
 # Copyright: GPLv3
 #
 # Usage:
@@ -20,6 +20,8 @@
 import pygame
 import sys
 import time
+from multiprocessing import Process, Value
+# import multiprocessing as mp
 
 # try to set up smbus:
 # (this will only work on the raspberry pi, so if it fails we drop back to dummy mode)
@@ -122,6 +124,7 @@ def write_servo(cmd, value):
     except Exception as e:
         print('write_servo exception: %s' % e)
 
+
 def write_LED(cmd, value):
     try:
         value = int(value)
@@ -166,14 +169,16 @@ class Button():
             self.bg = GREY  # mouseover color
  
     def call_back_down(self):
-        color = self.call_back_down_()
-        if color is not None:
-            self.color = color
+        self.call_back_down_(self)
+        # color = self.call_back_down_()
+        # if color is not None:
+        #     self.color = color
 
     def call_back_up(self):
-        color = self.call_back_up_()
-        if color is not None:
-            self.color = color
+        self.call_back_up_(self)
+        # color = self.call_back_up_()
+        # if color is not None:
+        #     self.color = color
 
 
 class Slider():
@@ -250,69 +255,81 @@ class Slider():
 
 
 # define our call-back functions:
-def red_pressed():
+def red_pressed(me):
     global is_red
     is_red = not is_red
     print('red!', flush=True)
     if is_red:
         if have_smbus:
-            write_reg(CMD_IO1, 0)
-        return RED
-    if have_smbus:
-        write_reg(CMD_IO1, 1)
-    return GREY2
+            # write_reg(CMD_IO1, 0)
+            dim_red.value = int(pwm_red.val)
+        # return RED
+        me.color = RED
+    else:
+        if have_smbus:
+            # write_reg(CMD_IO1, 1)
+            dim_red.value = 0
+        me.color = GREY2
 
 
-def red_released():
+def red_released(me):
     pass
 
 
-def green_pressed():
+def green_pressed(me):
     global is_green
     is_green = not is_green
     print('green!', flush=True)
     if is_green:
         if have_smbus:
-            write_reg(CMD_IO2, 0)
-        return GREEN
-    if have_smbus:
-        write_reg(CMD_IO2, 1)
-    return GREY2
+            # write_reg(CMD_IO2, 0)
+            dim_green.value = int(pwm_green.val)
+        # return GREEN
+        me.color = GREEN
+    else:
+        if have_smbus:
+            # write_reg(CMD_IO2, 1)
+            dim_green.value = 0
+        me.color = GREY2
 
-def green_released():
+def green_released(me):
     pass
 
 
-def blue_pressed():
+def blue_pressed(me):
     global is_blue
     is_blue = not is_blue
     print('blue!', flush=True)
     if is_blue:
         if have_smbus:
-            write_reg(CMD_IO3, 0)
-        return BLUE
-    if have_smbus:
-        write_reg(CMD_IO3, 1)
-    return GREY2
+            # write_reg(CMD_IO3, 0)
+            dim_blue.value = int(pwm_blue.val)
+        # return BLUE
+        me.color = BLUE
+    else:
+        if have_smbus:
+            # write_reg(CMD_IO3, 1)
+            dim_blue.value = 0
+        me.color = GREY2
 
 
-def blue_released():
+def blue_released(me):
     pass
 
 
-def buzzer_pressed():
+def buzzer_pressed(me):
     print('buzzer %s!' % int(buzzer_freq.val), flush=True)
     if have_smbus:
         write_reg(CMD_BUZZER, buzzer_freq.val)
 
 
-def buzzer_released():
+def buzzer_released(me):
     print('buzzer off!', flush=True)
     if have_smbus:
         write_reg(CMD_BUZZER, 0)
 
 
-def forward_pressed():
+def forward_pressed(me):
     print('forward', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 1)
@@ -329,13 +346,13 @@ def forward_pressed():
         write_reg(CMD_PWM1, speed.val * 10)
         write_reg(CMD_PWM2, speed.val * 10)
 
-def forward_released():
+def forward_released(me):
     print('stop!', flush=True)
     if have_smbus:
         write_reg(CMD_PWM1, 0)
         write_reg(CMD_PWM2, 0)
 
-def backward_pressed():
+def backward_pressed(me):
     print('backward', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 0)
@@ -352,13 +369,13 @@ def backward_pressed():
         write_reg(CMD_PWM1, speed.val * 10)
         write_reg(CMD_PWM2, speed.val * 10)
 
-def backward_released():
+def backward_released(me):
     print('stop!', flush=True)
     if have_smbus:
         write_reg(CMD_PWM1, 0)
         write_reg(CMD_PWM2, 0)
 
-def left_pressed():
+def left_pressed(me):
     print('left', flush=True)
     global state_servo_1
     state_servo_1 += turning_angle.val
@@ -368,10 +385,10 @@ def left_pressed():
         # write_reg(CMD_SERVO1, num_map(state_servo_1, 0, 180, 500, 2500))
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def left_released():
+def left_released(me):
     pass
 
-def right_pressed():
+def right_pressed(me):
     print('right', flush=True)
     global state_servo_1
     state_servo_1 -= turning_angle.val
@@ -381,11 +398,11 @@ def right_pressed():
         # write_reg(CMD_SERVO1, num_map(state_servo_1, 0, 180, 500, 2500))
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def right_released():
+def right_released(me):
     pass
 
 
-def forward_left_pressed():
+def forward_left_pressed(me):
     print('forward left', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 1)
@@ -409,7 +426,7 @@ def forward_left_pressed():
     if have_smbus:
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def forward_left_released():
+def forward_left_released(me):
     print('stop!', flush=True)
     current_angle.val = 90
     if have_smbus:
@@ -417,7 +434,7 @@ def forward_left_released():
         write_reg(CMD_PWM2, 0)
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
-def forward_right_pressed():
+def forward_right_pressed(me):
     print('forward right', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 1)
@@ -441,7 +458,7 @@ def forward_right_pressed():
     if have_smbus:
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def forward_right_released():
+def forward_right_released(me):
     print('stop!', flush=True)
     current_angle.val = 90
     if have_smbus:
@@ -449,7 +466,7 @@ def forward_right_released():
         write_reg(CMD_PWM2, 0)
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
-def backward_left_pressed():
+def backward_left_pressed(me):
     print('backward left', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 0)
@@ -473,7 +490,7 @@ def backward_left_pressed():
     if have_smbus:
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def backward_left_released():
+def backward_left_released(me):
     print('stop!', flush=True)
     current_angle.val = 90
     # current_angle.draw()
@@ -482,7 +499,7 @@ def backward_left_released():
         write_reg(CMD_PWM2, 0)
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
-def backward_right_pressed():
+def backward_right_pressed(me):
     print('backward right', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 0)
@@ -507,7 +524,7 @@ def backward_right_pressed():
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
 
-def backward_right_released():
+def backward_right_released(me):
     print('stop!', flush=True)
     current_angle.val = 90
     if have_smbus:
@@ -516,7 +533,7 @@ def backward_right_released():
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
 
-def cam_up_pressed():
+def cam_up_pressed(me):
     global state_servo_3
     state_servo_3 += step_slider.val
     state_servo_3 = constrain(state_servo_3, 0, 180)
@@ -525,10 +542,10 @@ def cam_up_pressed():
         # write_reg(CMD_SERVO3, num_map(state_servo_3, 0, 180, 500, 2500))
         write_servo(CMD_SERVO3, state_servo_3 + fine_servo_3.val)
 
-def cam_up_released():
+def cam_up_released(me):
     pass
 
-def cam_down_pressed():
+def cam_down_pressed(me):
     global state_servo_3
     state_servo_3 -= step_slider.val
     state_servo_3 = constrain(state_servo_3, 0, 180)
@@ -537,10 +554,10 @@ def cam_down_pressed():
         # write_reg(CMD_SERVO3, num_map(state_servo_3, 0, 180, 500, 2500))
         write_servo(CMD_SERVO3, state_servo_3 + fine_servo_3.val)
 
-def cam_down_released():
+def cam_down_released(me):
     pass
 
-def cam_home_pressed():
+def cam_home_pressed(me):
     global state_servo_2
     global state_servo_3
     state_servo_2 = 90
@@ -553,10 +570,10 @@ def cam_home_pressed():
         write_servo(CMD_SERVO2, 90 + fine_servo_2.val)
         write_servo(CMD_SERVO3, 90 + fine_servo_3.val)
 
-def cam_home_released():
+def cam_home_released(me):
     pass
 
-def cam_left_pressed():
+def cam_left_pressed(me):
     global state_servo_2
     # state_servo_2 -= 10
     state_servo_2 -= step_slider.val
@@ -566,10 +583,10 @@ def cam_left_pressed():
         # write_reg(CMD_SERVO2, num_map(180 - state_servo_2, 0, 180, 500, 2500))
         write_servo(CMD_SERVO2, 180 - state_servo_2 - fine_servo_2.val)
 
-def cam_left_released():
+def cam_left_released(me):
     pass
 
-def cam_right_pressed():
+def cam_right_pressed(me):
     global state_servo_2
     # state_servo_2 += 10
     state_servo_2 += step_slider.val
@@ -579,8 +596,9 @@ def cam_right_pressed():
         # write_reg(CMD_SERVO2, num_map(180 - state_servo_2, 0, 180, 500, 2500))
         write_servo(CMD_SERVO2, 180 - state_servo_2 - fine_servo_2.val)
 
-def cam_right_released():
+def cam_right_released(me):
     pass
+
 
 def vertical_moved(val):
     global state_servo_3
@@ -603,6 +621,61 @@ def current_angle_moved(val):
     if have_smbus:
         # write_reg(CMD_SERVO1, num_map(state_servo_1, 0, 180, 500, 2500))
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
+
+
+def red_pwm_moved(val):
+    if have_smbus:
+        if is_red:
+            dim_red.value = int(val)
+        else:
+            dim_red.value = 0
+
+
+def green_pwm_moved(val):
+    if have_smbus:
+        if is_green:
+            dim_green.value = int(val)
+        else:
+            dim_green.value = 0
+
+
+def blue_pwm_moved(val):
+    if have_smbus:
+        if is_blue:
+            dim_blue.value = int(val)
+        else:
+            dim_blue.value = 0
+
+
+def dimmer(n, cmd):
+    smbus_address = 0x18  # default address
+    bus = smbus.SMBus(1)
+    bus.open(1)
+
+    start_time = time.time()
+    bus.write_i2c_block_data(smbus_address, CMD_IO1, [0, 0])
+    bus.write_i2c_block_data(smbus_address, CMD_IO1, [0, 1])
+
+    bus.write_i2c_block_data(smbus_address, CMD_IO2, [0, 0])
+    bus.write_i2c_block_data(smbus_address, CMD_IO2, [0, 1])
+
+    bus.write_i2c_block_data(smbus_address, CMD_IO3, [0, 0])
+    bus.write_i2c_block_data(smbus_address, CMD_IO3, [0, 1])
+    end_time = time.time()
+    delta_time = end_time - start_time
+    print(delta_time)
+
+    while True:
+        pwm = n.value
+        if pwm == -1:
+            return
+        if pwm > 0:
+            bus.write_i2c_block_data(smbus_address, cmd, [0, 0])
+        for pwm_counter in range(10):
+            if pwm_counter < pwm:
+                time.sleep(delta_time/6)
+            else:
+                bus.write_i2c_block_data(smbus_address, cmd, [0, 1])
 
 
 def mousebuttondown():
@@ -683,26 +756,47 @@ if __name__ == '__main__':
             write_reg(CMD_BUZZER, 0)
             time.sleep(0.2)
 
+        # initialize the LED dimmer's:
+        # mp.set_start_method('spawn')
+
+        dim_red = Value('i', 5)
+        p_red = Process(target=dimmer, args=(dim_red, CMD_IO1))
+        p_red.start()
+
+        dim_green = Value('i', 5)
+        p_green = Process(target=dimmer, args=(dim_green, CMD_IO2))
+        p_green.start()
+
+        dim_blue = Value('i', 5)
+        p_blue = Process(target=dimmer, args=(dim_blue, CMD_IO3))
+        p_blue.start()
+
         # set LED's:
         if is_red:
-            write_reg(CMD_IO1, 0)
+            # write_reg(CMD_IO1, 0)
+            dim_red.value = 5
             button_red_color = RED
         else:
-            write_reg(CMD_IO1, 1)
+            # write_reg(CMD_IO1, 1)
+            dim_red.value = 0
             button_red_color = GREY2
 
         if is_green:
-            write_reg(CMD_IO2, 0)
+            # write_reg(CMD_IO2, 0)
+            dim_green.value = 5
             button_green_color = GREEN
         else:
-            write_reg(CMD_IO2, 1)
+            # write_reg(CMD_IO2, 1)
+            dim_green.value = 0
             button_green_color = GREY2
 
         if is_blue:
-            write_reg(CMD_IO3, 0)
+            # write_reg(CMD_IO3, 0)
+            dim_blue.value = 5
             button_blue_color = BLUE
         else:
-            write_reg(CMD_IO3, 1)
+            # write_reg(CMD_IO3, 1)
+            dim_blue.value = 0
             button_blue_color = GREY2
 
     # insert smart car border:
@@ -771,17 +865,17 @@ if __name__ == '__main__':
     # red pwm:
     text_surf = font.render('Red', 1, BLACK)
     screen.blit(text_surf, (260, 425))
-    pwm_red = Slider("pwm red", 5, 10, 0, 340, 425)
+    pwm_red = Slider("pwm red", 5, 10, 0, 340, 425, action=red_pwm_moved)
 
     # green pwm:
     text_surf = font.render('Green', 1, BLACK)
     screen.blit(text_surf, (247, 465))
-    pwm_green = Slider("pwm green", 5, 10, 0, 340, 465)
+    pwm_green = Slider("pwm green", 5, 10, 0, 340, 465, action=green_pwm_moved)
 
     # blue pwm:
     text_surf = font.render('Blue', 1, BLACK)
     screen.blit(text_surf, (255, 505))
-    pwm_blue = Slider("pwm blue", 5, 10, 0, 340, 505)
+    pwm_blue = Slider("pwm blue", 5, 10, 0, 340, 505, action=blue_pwm_moved)
 
 
     # camera horizontal angle:
@@ -833,31 +927,9 @@ if __name__ == '__main__':
     buttons += [button_cam_up, button_cam_down, button_cam_left, button_cam_right, button_cam_home]
     buttons += [button_forward_left, button_forward_right, button_backward_left, button_backward_right]
 
-    # the event loop:
-    # pwm_value = 7
-    pwm_counter = 0
-    while True:
-        # pwm switch our LED's:
-        # so slow that it is a blinker rather than a dimmer!
-        if have_smbus:
-            if is_red:
-                if pwm_counter < pwm_red.val:
-                    write_LED(CMD_IO1, 0)
-                else:
-                    write_LED(CMD_IO1, 1)
-            if is_green:
-                if pwm_counter < pwm_green.val:
-                    write_LED(CMD_IO2, 0)
-                else:
-                    write_LED(CMD_IO2, 1)
-            if is_blue:
-                if pwm_counter < pwm_blue.val:
-                    write_LED(CMD_IO3, 0)
-                else:
-                    write_LED(CMD_IO3, 1)
-            pwm_counter += 1
-            pwm_counter %= 10
 
+    # the event loop:
+    while True:
         if have_camera:
             if cam.query_image():
                 img = cam.get_image()
@@ -866,6 +938,21 @@ if __name__ == '__main__':
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+                if have_smbus:
+                    # switch off dimmer processes:
+                    dim_red.value = -1
+                    p_red.join()
+
+                    dim_green.value = -1
+                    p_green.join()
+
+                    dim_blue.value = -1
+                    p_blue.join()
+
+                    # switch off LED's:
+                    write_reg(CMD_IO1, 1)
+                    write_reg(CMD_IO2, 1)
+                    write_reg(CMD_IO3, 1)
                 if have_camera:
                     cam.stop()
                 pygame.quit()
@@ -889,5 +976,5 @@ if __name__ == '__main__':
             s.draw()
 
         pygame.display.flip()
-        # pygame.time.wait(40)
-        pygame.time.wait(10)
+        pygame.time.wait(40)
+        # pygame.time.wait(10)
