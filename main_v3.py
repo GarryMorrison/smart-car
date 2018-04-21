@@ -13,15 +13,13 @@
 # Usage:
 #   Log into the raspberry pi with VNC or XRDP
 #   open a terminal
-#   run: python3 main_v2.py
+#   run: python3 main_v3.py
 #
 #######################################################################
 
 import pygame
 import sys
 import time
-# from multiprocessing import Process, Value
-import multiprocessing as mp
 
 # try to set up smbus:
 # (this will only work on the raspberry pi, so if it fails we drop back to dummy mode)
@@ -74,8 +72,8 @@ MAGENTA = (255, 0, 255)
 TRANS = (1, 1, 1)
 
 # define some display constants:
-display_width = 700
-display_height = 540
+display_width = 710
+display_height = 560
 background_color = WHITE
 
 # define IO constants:
@@ -125,14 +123,6 @@ def write_servo(cmd, value):
         print('write_servo exception: %s' % e)
 
 
-def write_LED(cmd, value):
-    try:
-        value = int(value)
-        bus.write_i2c_block_data(smbus_address, cmd, [value >> 8, value & 0xff])
-        # bus.write_byte_data(smbus_address, cmd, value & 0xff)
-    except Exception as e:
-        print('write_LED exception: %s' % e)
-
 # initial button and slider code from here:
 # http://www.dreamincode.net/forums/topic/401541-buttons-and-sliders-in-pygame/
 
@@ -169,16 +159,14 @@ class Button():
             self.bg = GREY  # mouseover color
  
     def call_back_down(self):
-        self.call_back_down_(self)
-        # color = self.call_back_down_()
-        # if color is not None:
-        #     self.color = color
+        color = self.call_back_down_()
+        if color is not None:
+            self.color = color
 
     def call_back_up(self):
-        self.call_back_up_(self)
-        # color = self.call_back_up_()
-        # if color is not None:
-        #     self.color = color
+        color = self.call_back_up_()
+        if color is not None:
+            self.color = color
 
 
 class Slider():
@@ -254,82 +242,152 @@ class Slider():
             self.call_back(self.val)
 
 
+class ActiveMap():
+    def __init__(self, name, width, val, maxi, mini, xpos, ypos, action=None):
+        self.width = width
+        self.val = val  # start value
+        self.maxi = maxi  # maximum at slider position right
+        self.mini = mini  # minimum at slider position left
+        self.xpos = xpos  # x-location on screen
+        self.ypos = ypos  # y-location on screen
+        # self.surf = pygame.surface.Surface((100, 50))
+        self.hit = False  # the hit attribute indicates slider movement due to mouse interaction
+        self.call_back = action
+
+        w = self.width
+        s = w // 10  # step size
+        c = w // 2  # center
+        self.surface = pygame.surface.Surface((w + 50, w + 50))
+        # self.rect = self.surface.get_rect()
+        self.rect = pygame.Rect(xpos, ypos, xpos + w, ypos + w)
+        # print(self.rect)
+        self.surface.fill(WHITE)
+        pygame.draw.rect(self.surface, GREY, [0, 0, w, w], 0)
+        pygame.draw.rect(self.surface, BLACK, [0, 0, w, w], 1)
+        pygame.draw.rect(self.surface, BLACK, [s, s, w - 2 * s, w - 2 * s], 1)
+        pygame.draw.rect(self.surface, BLACK, [2 * s, 2 * s, w - 4 * s, w - 4 * s], 1)
+        pygame.draw.rect(self.surface, BLACK, [3 * s, 3 * s, w - 6 * s, w - 6 * s], 1)
+        pygame.draw.rect(self.surface, BLACK, [4 * s, 4 * s, w - 8 * s, w - 8 * s], 1)
+        pygame.draw.line(self.surface, BLACK, (0, c), (w, c), 1)
+        pygame.draw.line(self.surface, BLACK, (c, 0), (c, w), 1)
+
+        # button surface:
+        self.button_surf = pygame.surface.Surface((20, 20))
+        self.button_surf.fill(TRANS)
+        self.button_surf.set_colorkey(TRANS)
+        pygame.draw.circle(self.button_surf, BLACK, (10, 10), 6, 0)
+        pygame.draw.circle(self.button_surf, ORANGE, (10, 10), 4, 0)
+
+        # define our font for the horizontal and vertical values:
+        self.font = pygame.font.SysFont("Verdana", 16)
+
+        # horizontal value surface:
+        self.horizontal_surf = pygame.surface.Surface((20, 20))
+        self.txt_surf_x = self.font.render(str(int(self.val[0])), 1, BLACK)
+        self.txt_rect_x = self.txt_surf_x.get_rect(center=(self.width // 2, self.width + 20))
+
+        # vertical value surface:
+        self.vertical_surf = pygame.surface.Surface((20, 20))
+        self.txt_surf_y = self.font.render(str(int(self.val[1])), 1, BLACK)
+        self.txt_rect_y = self.txt_surf_y.get_rect(center=(self.width + 30, self.width // 2))
+
+    def draw(self):
+        # static
+        surface = self.surface.copy()
+
+        # current-location button:
+        # num_map(value, fromLow, fromHigh, toLow, toHigh)
+        xpos = num_map(self.val[0], 0, 180, 0, self.width)
+        ypos = num_map(self.val[1], 0, 180, 0, self.width)
+        self.button_rect = self.button_surf.get_rect(center=(xpos, ypos))
+        surface.blit(self.button_surf, self.button_rect)
+        self.button_rect.move_ip(self.xpos, self.ypos)  # move of button box to correct screen position
+
+        # horizontal value:
+        surface.blit(self.txt_surf_x, self.txt_rect_x)
+
+        # vertical value:
+        surface.blit(self.txt_surf_y, self.txt_rect_y)
+
+        # screen
+        screen.blit(surface, (self.xpos, self.ypos))
+
+    def move(self):
+        self.val[0] = num_map(pygame.mouse.get_pos()[0] - self.xpos, 0, self.width, 0, 180)
+        self.val[1] = num_map(pygame.mouse.get_pos()[1] - self.ypos, 0, self.width, 0, 180)
+        self.val[0] = int(constrain(self.val[0], 0, 180))
+        self.val[1] = int(constrain(self.val[1], 0, 180))
+
+        self.txt_surf_x = self.font.render(str(self.val[0]), 1, BLACK)
+        self.txt_surf_y = self.font.render(str(self.val[1]), 1, BLACK)
+        if self.call_back is not None:
+            self.call_back(self.val)
+
+
 # define our call-back functions:
-def red_pressed(me):
+def red_pressed():
     global is_red
     is_red = not is_red
     print('red!', flush=True)
     if is_red:
         if have_smbus:
-            # write_reg(CMD_IO1, 0)
-            dim_red.value = int(pwm_red.val)
-        # return RED
-        me.color = RED
-    else:
-        if have_smbus:
-            # write_reg(CMD_IO1, 1)
-            dim_red.value = 0
-        me.color = GREY2
+            write_reg(CMD_IO1, 0)
+        return RED
+    if have_smbus:
+        write_reg(CMD_IO1, 1)
+    return GREY2
 
 
-def red_released(me):
+def red_released():
     pass
 
 
-def green_pressed(me):
+def green_pressed():
     global is_green
     is_green = not is_green
     print('green!', flush=True)
     if is_green:
         if have_smbus:
-            # write_reg(CMD_IO2, 0)
-            dim_green.value = int(pwm_green.val)
-        # return GREEN
-        me.color = GREEN
-    else:
-        if have_smbus:
-            # write_reg(CMD_IO2, 1)
-            dim_green.value = 0
-        me.color = GREY2
+            write_reg(CMD_IO2, 0)
+        return GREEN
+    if have_smbus:
+        write_reg(CMD_IO2, 1)
+    return GREY2
 
-def green_released(me):
+def green_released():
     pass
 
 
-def blue_pressed(me):
+def blue_pressed():
     global is_blue
     is_blue = not is_blue
     print('blue!', flush=True)
     if is_blue:
         if have_smbus:
-            # write_reg(CMD_IO3, 0)
-            dim_blue.value = int(pwm_blue.val)
-        # return BLUE
-        me.color = BLUE
-    else:
-        if have_smbus:
-            # write_reg(CMD_IO3, 1)
-            dim_blue.value = 0
-        me.color = GREY2
+            write_reg(CMD_IO3, 0)
+        return BLUE
+    if have_smbus:
+        write_reg(CMD_IO3, 1)
+    return GREY2
 
 
-def blue_released(me):
+def blue_released():
     pass
 
 
-def buzzer_pressed(me):
+def buzzer_pressed():
     print('buzzer %s!' % int(buzzer_freq.val), flush=True)
     if have_smbus:
         write_reg(CMD_BUZZER, buzzer_freq.val)
 
 
-def buzzer_released(me):
+def buzzer_released():
     print('buzzer off!', flush=True)
     if have_smbus:
         write_reg(CMD_BUZZER, 0)
 
 
-def forward_pressed(me):
+def forward_pressed():
     print('forward', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 1)
@@ -346,13 +404,13 @@ def forward_pressed(me):
         write_reg(CMD_PWM1, speed.val * 10)
         write_reg(CMD_PWM2, speed.val * 10)
 
-def forward_released(me):
+def forward_released():
     print('stop!', flush=True)
     if have_smbus:
         write_reg(CMD_PWM1, 0)
         write_reg(CMD_PWM2, 0)
 
-def backward_pressed(me):
+def backward_pressed():
     print('backward', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 0)
@@ -369,13 +427,13 @@ def backward_pressed(me):
         write_reg(CMD_PWM1, speed.val * 10)
         write_reg(CMD_PWM2, speed.val * 10)
 
-def backward_released(me):
+def backward_released():
     print('stop!', flush=True)
     if have_smbus:
         write_reg(CMD_PWM1, 0)
         write_reg(CMD_PWM2, 0)
 
-def left_pressed(me):
+def left_pressed():
     print('left', flush=True)
     global state_servo_1
     state_servo_1 += turning_angle.val
@@ -385,10 +443,10 @@ def left_pressed(me):
         # write_reg(CMD_SERVO1, num_map(state_servo_1, 0, 180, 500, 2500))
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def left_released(me):
+def left_released():
     pass
 
-def right_pressed(me):
+def right_pressed():
     print('right', flush=True)
     global state_servo_1
     state_servo_1 -= turning_angle.val
@@ -398,11 +456,11 @@ def right_pressed(me):
         # write_reg(CMD_SERVO1, num_map(state_servo_1, 0, 180, 500, 2500))
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def right_released(me):
+def right_released():
     pass
 
 
-def forward_left_pressed(me):
+def forward_left_pressed():
     print('forward left', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 1)
@@ -426,7 +484,7 @@ def forward_left_pressed(me):
     if have_smbus:
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def forward_left_released(me):
+def forward_left_released():
     print('stop!', flush=True)
     current_angle.val = 90
     if have_smbus:
@@ -434,7 +492,7 @@ def forward_left_released(me):
         write_reg(CMD_PWM2, 0)
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
-def forward_right_pressed(me):
+def forward_right_pressed():
     print('forward right', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 1)
@@ -458,7 +516,7 @@ def forward_right_pressed(me):
     if have_smbus:
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def forward_right_released(me):
+def forward_right_released():
     print('stop!', flush=True)
     current_angle.val = 90
     if have_smbus:
@@ -466,7 +524,7 @@ def forward_right_released(me):
         write_reg(CMD_PWM2, 0)
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
-def backward_left_pressed(me):
+def backward_left_pressed():
     print('backward left', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 0)
@@ -490,7 +548,7 @@ def backward_left_pressed(me):
     if have_smbus:
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
-def backward_left_released(me):
+def backward_left_released():
     print('stop!', flush=True)
     current_angle.val = 90
     # current_angle.draw()
@@ -499,7 +557,7 @@ def backward_left_released(me):
         write_reg(CMD_PWM2, 0)
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
-def backward_right_pressed(me):
+def backward_right_pressed():
     print('backward right', str(int(10 * speed.val)), flush=True)
     if have_smbus:
         write_reg(CMD_DIR1, 0)
@@ -524,7 +582,7 @@ def backward_right_pressed(me):
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
 
-def backward_right_released(me):
+def backward_right_released():
     print('stop!', flush=True)
     current_angle.val = 90
     if have_smbus:
@@ -533,7 +591,7 @@ def backward_right_released(me):
         write_servo(CMD_SERVO1, 90 + fine_servo_1.val)
 
 
-def cam_up_pressed(me):
+def cam_up_pressed():
     global state_servo_3
     state_servo_3 += step_slider.val
     state_servo_3 = constrain(state_servo_3, 0, 180)
@@ -542,10 +600,10 @@ def cam_up_pressed(me):
         # write_reg(CMD_SERVO3, num_map(state_servo_3, 0, 180, 500, 2500))
         write_servo(CMD_SERVO3, state_servo_3 + fine_servo_3.val)
 
-def cam_up_released(me):
+def cam_up_released():
     pass
 
-def cam_down_pressed(me):
+def cam_down_pressed():
     global state_servo_3
     state_servo_3 -= step_slider.val
     state_servo_3 = constrain(state_servo_3, 0, 180)
@@ -554,10 +612,10 @@ def cam_down_pressed(me):
         # write_reg(CMD_SERVO3, num_map(state_servo_3, 0, 180, 500, 2500))
         write_servo(CMD_SERVO3, state_servo_3 + fine_servo_3.val)
 
-def cam_down_released(me):
+def cam_down_released():
     pass
 
-def cam_home_pressed(me):
+def cam_home_pressed():
     global state_servo_2
     global state_servo_3
     state_servo_2 = 90
@@ -570,10 +628,10 @@ def cam_home_pressed(me):
         write_servo(CMD_SERVO2, 90 + fine_servo_2.val)
         write_servo(CMD_SERVO3, 90 + fine_servo_3.val)
 
-def cam_home_released(me):
+def cam_home_released():
     pass
 
-def cam_left_pressed(me):
+def cam_left_pressed():
     global state_servo_2
     # state_servo_2 -= 10
     state_servo_2 -= step_slider.val
@@ -583,10 +641,10 @@ def cam_left_pressed(me):
         # write_reg(CMD_SERVO2, num_map(180 - state_servo_2, 0, 180, 500, 2500))
         write_servo(CMD_SERVO2, 180 - state_servo_2 - fine_servo_2.val)
 
-def cam_left_released(me):
+def cam_left_released():
     pass
 
-def cam_right_pressed(me):
+def cam_right_pressed():
     global state_servo_2
     # state_servo_2 += 10
     state_servo_2 += step_slider.val
@@ -596,9 +654,8 @@ def cam_right_pressed(me):
         # write_reg(CMD_SERVO2, num_map(180 - state_servo_2, 0, 180, 500, 2500))
         write_servo(CMD_SERVO2, 180 - state_servo_2 - fine_servo_2.val)
 
-def cam_right_released(me):
+def cam_right_released():
     pass
-
 
 def vertical_moved(val):
     global state_servo_3
@@ -623,77 +680,32 @@ def current_angle_moved(val):
         write_servo(CMD_SERVO1, state_servo_1 + fine_servo_1.val)
 
 
-def red_pwm_moved(val):
+def map_moved(val):
+    global state_servo_2
+    global state_servo_3
+    state_servo_2 = val[0]
+    state_servo_3 = val[1]
     if have_smbus:
-        if is_red:
-            dim_red.value = int(val)
-        else:
-            dim_red.value = 0
+        write_servo(CMD_SERVO2, 180 - state_servo_2 - fine_servo_2.val)
+        write_servo(CMD_SERVO3, 180 - state_servo_3 - fine_servo_3.val)
 
 
-def green_pwm_moved(val):
-    if have_smbus:
-        if is_green:
-            dim_green.value = int(val)
-        else:
-            dim_green.value = 0
+# def mousebuttondown():
+#     pos = pygame.mouse.get_pos()
+#     for button in buttons:
+#         if button.rect.collidepoint(pos):
+#             button.call_back_down()
+#     for s in slides:
+#         if s.button_rect.collidepoint(pos):
+#             s.hit = True
 
-
-def blue_pwm_moved(val):
-    if have_smbus:
-        if is_blue:
-            dim_blue.value = int(val)
-        else:
-            dim_blue.value = 0
-
-
-def dimmer(n, cmd):
-    smbus_address = 0x18  # default address
-    bus = smbus.SMBus(1)
-    bus.open(1)
-
-    start_time = time.time()
-    bus.write_i2c_block_data(smbus_address, CMD_IO1, [0, 0])
-    bus.write_i2c_block_data(smbus_address, CMD_IO1, [0, 1])
-
-    bus.write_i2c_block_data(smbus_address, CMD_IO2, [0, 0])
-    bus.write_i2c_block_data(smbus_address, CMD_IO2, [0, 1])
-
-    bus.write_i2c_block_data(smbus_address, CMD_IO3, [0, 0])
-    bus.write_i2c_block_data(smbus_address, CMD_IO3, [0, 1])
-    end_time = time.time()
-    delta_time = end_time - start_time
-    print(delta_time)
-
-    while True:
-        pwm = n.value
-        if pwm == -1:
-            return
-        if pwm > 0:
-            bus.write_i2c_block_data(smbus_address, cmd, [0, 0])
-        for pwm_counter in range(5):
-            if pwm_counter < pwm:
-                time.sleep(delta_time/6)
-            else:
-                bus.write_i2c_block_data(smbus_address, cmd, [0, 1])
-
-
-def mousebuttondown():
-    pos = pygame.mouse.get_pos()
-    for button in buttons:
-        if button.rect.collidepoint(pos):
-            button.call_back_down()
-    for s in slides:
-        if s.button_rect.collidepoint(pos):
-            s.hit = True
-
-def mousebuttonup():
-    pos = pygame.mouse.get_pos()
-    for button in buttons:
-        if button.rect.collidepoint(pos):
-            button.call_back_up()
-    for s in slides:
-        s.hit = False
+# def mousebuttonup():
+#     pos = pygame.mouse.get_pos()
+#     for button in buttons:
+#         if button.rect.collidepoint(pos):
+#             button.call_back_up()
+#     for s in slides:
+#         s.hit = False
 
 
 if __name__ == '__main__':
@@ -756,47 +768,26 @@ if __name__ == '__main__':
             write_reg(CMD_BUZZER, 0)
             time.sleep(0.2)
 
-        # initialize the LED dimmer's:
-        # mp.set_start_method('spawn') # nope, fails on the raspberry pi.
-
-        dim_red = mp.Value('i', 5)
-        p_red = mp.Process(target=dimmer, args=(dim_red, CMD_IO1))
-        p_red.start()
-
-        dim_green = mp.Value('i', 5)
-        p_green = mp.Process(target=dimmer, args=(dim_green, CMD_IO2))
-        p_green.start()
-
-        dim_blue = mp.Value('i', 5)
-        p_blue = mp.Process(target=dimmer, args=(dim_blue, CMD_IO3))
-        p_blue.start()
-
         # set LED's:
         if is_red:
-            # write_reg(CMD_IO1, 0)
-            dim_red.value = 5
+            write_reg(CMD_IO1, 0)
             button_red_color = RED
         else:
-            # write_reg(CMD_IO1, 1)
-            dim_red.value = 0
+            write_reg(CMD_IO1, 1)
             button_red_color = GREY2
 
         if is_green:
-            # write_reg(CMD_IO2, 0)
-            dim_green.value = 5
+            write_reg(CMD_IO2, 0)
             button_green_color = GREEN
         else:
-            # write_reg(CMD_IO2, 1)
-            dim_green.value = 0
+            write_reg(CMD_IO2, 1)
             button_green_color = GREY2
 
         if is_blue:
-            # write_reg(CMD_IO3, 0)
-            dim_blue.value = 5
+            write_reg(CMD_IO3, 0)
             button_blue_color = BLUE
         else:
-            # write_reg(CMD_IO3, 1)
-            dim_blue.value = 0
+            write_reg(CMD_IO3, 1)
             button_blue_color = GREY2
 
     # insert smart car border:
@@ -862,43 +853,27 @@ if __name__ == '__main__':
     screen.blit(text_surf, (60, 505))
     speed = Slider("speed", 50, 100, 0, 160, 505)
 
-    # red pwm:
-    text_surf = font.render('Red', 1, BLACK)
-    screen.blit(text_surf, (260, 425))
-    pwm_red = Slider("pwm red", 5, 5, 0, 340, 425, action=red_pwm_moved)
-
-    # green pwm:
-    text_surf = font.render('Green', 1, BLACK)
-    screen.blit(text_surf, (247, 465))
-    pwm_green = Slider("pwm green", 5, 5, 0, 340, 465, action=green_pwm_moved)
-
-    # blue pwm:
-    text_surf = font.render('Blue', 1, BLACK)
-    screen.blit(text_surf, (255, 505))
-    pwm_blue = Slider("pwm blue", 5, 5, 0, 340, 505, action=blue_pwm_moved)
-
-
     # camera horizontal angle:
-    text_surf = font.render('Horizontal', 1, BLACK)
-    screen.blit(text_surf, (45 + 380, 425))
-    horizontal = Slider("horizontal", 90, 180, 0, 160 + 380, 425, action=horizontal_moved)
+    # text_surf = font.render('Horizontal', 1, BLACK)
+    # screen.blit(text_surf, (45 + 380, 425))
+    # horizontal = Slider("horizontal", 90, 180, 0, 160 + 380, 425, action=horizontal_moved)
 
     # camera vertical angle:
-    text_surf = font.render('Vertical', 1, BLACK)
-    screen.blit(text_surf, (60 + 380, 465))
-    vertical = Slider("vertical", 90, 180, 0, 160 + 380, 465, action=vertical_moved)
+    # text_surf = font.render('Vertical', 1, BLACK)
+    # screen.blit(text_surf, (60 + 380, 465))
+    # vertical = Slider("vertical", 90, 180, 0, 160 + 380, 465, action=vertical_moved)
 
     # step:
-    text_surf = font.render('Step', 1, BLACK)
-    screen.blit(text_surf, (320 + 60 + 40 + 20 + 15, 505))
-    step_slider = Slider("Step", 10, 45, 0, 540, 505)
+    # text_surf = font.render('Step', 1, BLACK)
+    # screen.blit(text_surf, (320 + 60 + 40 + 20 + 15, 505))
+    # step_slider = Slider("Step", 10, 45, 0, 540, 505)
 
     # buzzer slider:
     buzzer_freq = Slider("buzzer freq", 2000, 6000, 0, 60 + 320, 190)
 
     # define our list of sliders:
-    slides = [buzzer_freq, fine_servo_1, fine_servo_2, fine_servo_3, fine_servo_4, step_slider, turning_angle, current_angle, speed, horizontal, vertical]
-    slides += [pwm_red, pwm_green, pwm_blue]
+    slides = [buzzer_freq, fine_servo_1, fine_servo_2, fine_servo_3, fine_servo_4, turning_angle, current_angle, speed]
+    # slides += [step_slider, horizontal, vertical]
 
     # define our buttons:
     button_red = Button("Red", (60 + 320, 30), red_pressed, red_released, bg=button_red_color, font_name="Segoe Print", font_size=16)
@@ -916,17 +891,23 @@ if __name__ == '__main__':
     button_backward_left = Button('BL', (60, 380), backward_left_pressed, backward_left_released, bg = GREY2, size=(95, 30))
     button_backward_right = Button('BR', (260, 380), backward_right_pressed, backward_right_released, bg = GREY2, size=(95, 30))
 
-    button_cam_up = Button('UP', (380 + 160, 300), cam_up_pressed, cam_up_released, bg = GREY2, size=(95, 30))
-    button_cam_down = Button('DOWN', (380 + 160, 380), cam_down_pressed, cam_down_released, bg = GREY2, size=(95, 30))
-    button_cam_home = Button('HOME', (380 + 160, 340), cam_home_pressed, cam_home_released, bg = GREY2, size=(95, 30))
-    button_cam_left = Button('LEFT', (380 + 60, 340), cam_left_pressed, cam_left_released, bg = GREY2, size=(95, 30))
-    button_cam_right = Button('RIGHT', (380 + 260, 340), cam_right_pressed, cam_right_released, bg = GREY2, size=(95, 30))
+    # button_cam_up = Button('UP', (380 + 160, 300), cam_up_pressed, cam_up_released, bg = GREY2, size=(95, 30))
+    # button_cam_down = Button('DOWN', (380 + 160, 380), cam_down_pressed, cam_down_released, bg = GREY2, size=(95, 30))
+    # button_cam_home = Button('HOME', (380 + 160, 340), cam_home_pressed, cam_home_released, bg = GREY2, size=(95, 30))
+    # button_cam_left = Button('LEFT', (380 + 60, 340), cam_left_pressed, cam_left_released, bg = GREY2, size=(95, 30))
+    # button_cam_right = Button('RIGHT', (380 + 260, 340), cam_right_pressed, cam_right_released, bg = GREY2, size=(95, 30))
 
     # define our list of buttons:
     buttons = [button_red, button_green, button_blue, button_buzzer, button_forward, button_backward, button_left, button_right]
-    buttons += [button_cam_up, button_cam_down, button_cam_left, button_cam_right, button_cam_home]
+    # buttons += [button_cam_up, button_cam_down, button_cam_left, button_cam_right, button_cam_home]
     buttons += [button_forward_left, button_forward_right, button_backward_left, button_backward_right]
 
+    # define our camera active map:
+    camera_map = ActiveMap('camera', 230, [90, 90], 180, 0, 420, 285, map_moved)
+    # camera_map.draw()
+
+    # define our list of active maps:
+    active_maps = [camera_map]
 
     # the event loop:
     while True:
@@ -938,29 +919,34 @@ if __name__ == '__main__':
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                if have_smbus:
-                    # switch off dimmer processes:
-                    dim_red.value = -1
-                    p_red.join()
-
-                    dim_green.value = -1
-                    p_green.join()
-
-                    dim_blue.value = -1
-                    p_blue.join()
-
-                    # switch off LED's:
-                    write_reg(CMD_IO1, 1)
-                    write_reg(CMD_IO2, 1)
-                    write_reg(CMD_IO3, 1)
                 if have_camera:
                     cam.stop()
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                mousebuttondown()
+                # mousebuttondown()
+                pos = pygame.mouse.get_pos()
+                for button in buttons:
+                    if button.rect.collidepoint(pos):
+                        button.call_back_down()
+                for s in slides:
+                    if s.button_rect.collidepoint(pos):
+                        s.hit = True
+                for amap in active_maps:
+                    # if amap.button_rect.collidepoint(pos):
+                    if amap.rect.collidepoint(pos):
+                        amap.hit = True
+
             elif event.type == pygame.MOUSEBUTTONUP:
-                mousebuttonup()
+                # mousebuttonup()
+                pos = pygame.mouse.get_pos()
+                for button in buttons:
+                    if button.rect.collidepoint(pos):
+                        button.call_back_up()
+                for s in slides:
+                    s.hit = False
+                for amap in active_maps:
+                    amap.hit = False
 
         # draw buttons:
         for button in buttons:
@@ -975,6 +961,14 @@ if __name__ == '__main__':
         for s in slides:
             s.draw()
 
+        # move active map:
+        for amap in active_maps:
+            if amap.hit:
+                amap.move()
+
+        # draw active maps:
+        for amap in active_maps:
+            amap.draw()
+
         pygame.display.flip()
         pygame.time.wait(40)
-        # pygame.time.wait(10)
