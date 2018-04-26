@@ -7,7 +7,7 @@
 # Author: Garry Morrison
 # email: garry.morrison _at_ gmail.com
 # Date: 13/4/2018
-# Update: 23/4/2018
+# Update: 25/4/2018
 # Copyright: GPLv3
 #
 # Usage:
@@ -47,6 +47,11 @@ cy = camera_size[1]
 # another option is threading, but that depends on if the slow speed is the camera or VNC.
 camera_frequency = 25
 
+# cam.set_controls(hflip = True, vflip = False)
+# camera controls:
+hflip = False
+vflip = True
+
 
 # try to set up the camera:
 # (again, this will only work on the raspberry pi, so if it fails we drop back to a static image)
@@ -62,6 +67,9 @@ try:
         cam.start()
         cs = cam.get_size()
         print('camera size: %s' % str(cs))
+        # cam.set_controls(hflip, vflip)
+        # print('controls', cam.get_controls())
+        # cam.set_controls(hflip=hflip, vflip=vflip) # nope, bugs out in python 3.
         have_camera = True
 except ImportError:
     print('failed to find a camera')
@@ -822,6 +830,8 @@ if __name__ == '__main__':
         if cam.query_image():
             img = cam.get_image()
     img = pygame.transform.scale(img, camera_size)
+    if hflip or vflip:
+        img = pygame.transform.flip(img, hflip, vflip)
     screen.blit(img, (2, 2))
 
     # insert 'Servo Fine Tuning' text:
@@ -940,6 +950,8 @@ if __name__ == '__main__':
                 if cam.query_image():
                     img = cam.get_image()
                     img = pygame.transform.scale(img, camera_size)
+                    if hflip or vflip:
+                        img = pygame.transform.flip(img, hflip, vflip)
                     screen.blit(img, (2, 2))
                     pygame.display.flip()
                 # end_time = time.time()
