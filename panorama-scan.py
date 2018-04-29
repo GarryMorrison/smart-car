@@ -21,7 +21,7 @@
 # Author: Garry Morrison
 # email: garry.morrison _at_ gmail.com
 # Date: 27/4/2018
-# Update: 27/4/2018
+# Update: 29/4/2018
 # Copyright: GPLv3
 #
 # Usage:
@@ -36,6 +36,10 @@ import sys
 # import cv2
 import os
 import pygame
+
+
+# beep to indicated start and end of panorama-scan:
+beep = True
 
 
 # try to set up smbus:
@@ -87,6 +91,9 @@ except ImportError:
 count = 20
 # count = 1
 
+# sleep time, in seconds, between changing angle and taking a photo:
+SLEEP_TIME = 1
+
 # min similarity for image to be considered valid during image averaging:
 IMAGE_SIMILARITY = 0.75
 
@@ -101,6 +108,7 @@ CMD_SERVO1 = 0
 CMD_SERVO2 = 1
 CMD_SERVO3 = 2
 CMD_SERVO4 = 3
+CMD_BUZZER = 8
 SERVO_MAX_PULSE_WIDTH = 2500
 SERVO_MIN_PULSE_WIDTH = 500
 
@@ -196,7 +204,7 @@ def create_simm_average_camera_image(count):
     float_img = [np.float64(i) for i in rot_img]
 
     # find average of similar images:
-    mean_img = float_img[0]
+    mean_img = float_img[-1]
     i = 1
     for k in range(1, count):
         tmp_img = float_img[k]
@@ -228,6 +236,52 @@ if __name__ == '__main__':
         print("Creating " + dest_dir + " directory.")
         os.makedirs(dest_dir)
 
+    # now find subdirectories:
+    sub_dirs = [d for d in os.listdir(dest_dir) if os.path.isdir(dest_dir + '/' + d)]
+    print('sub_dirs: %s' % sub_dirs)
+
+    # find max integer named subdirectory:
+    max_int_sub_dir = 0
+    for d in sub_dirs:
+        try:
+            int_d = int(d)
+            max_int_sub_dir = max(max_int_sub_dir, int_d)
+        except ValueError as e:
+            print('sub_dirs exception: %s' % e)
+            pass
+
+    # increment, to next empty slot:
+    max_int_sub_dir += 1
+
+    # finally, we have our full destination directory:
+    dest_dir += '/' + str(max_int_sub_dir)
+
+    # check if full dest_dir exists, if not create it:
+    if not os.path.exists(dest_dir):
+        print("Creating " + dest_dir + " directory.")
+        os.makedirs(dest_dir)
+
+    # test our directory selection code works, then exit:
+    # sys.exit(0)
+
+    # beep on startup:
+    if beep:
+        write_reg(CMD_BUZZER, 1000)
+        time.sleep(0.2)
+        write_reg(CMD_BUZZER, 0)
+
+    # sleep 30s
+    time.sleep(30)
+
+    # warn about to start scan:
+    if beep:
+        write_reg(CMD_BUZZER, 2000)
+        time.sleep(0.2)
+        write_reg(CMD_BUZZER, 0)
+
+    # sleep 5s
+    time.sleep(5)
+
     # panorama settings:
     # min_angle = 0
     # max_angle = 180
@@ -238,7 +292,7 @@ if __name__ == '__main__':
         write_servo(CMD_SERVO2, 180 - angle)
 
         # let the camera warm up to current angle:
-        time.sleep(10)
+        time.sleep(SLEEP_TIME)
         img = create_simm_average_camera_image(count)
         ## cv2.imshow(str(angle), img)
         # cv2.imwrite(dest_dir + '/' + str(angle) + '.png', img)
@@ -246,6 +300,12 @@ if __name__ == '__main__':
 
     # return camera to 90 degree position:
     write_servo(CMD_SERVO2, 90)
+
+    # beep on finish:
+    if beep:
+        write_reg(CMD_BUZZER, 1000)
+        time.sleep(0.2)
+        write_reg(CMD_BUZZER, 0)
 
     # tidy up and quit:
     # cv2.waitKey(0)
