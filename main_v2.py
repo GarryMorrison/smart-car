@@ -757,8 +757,6 @@ if __name__ == '__main__':
             time.sleep(0.2)
 
         # initialize the LED dimmer's:
-        # mp.set_start_method('spawn') # nope, fails on the raspberry pi.
-
         dim_red = mp.Value('i', 5)
         p_red = mp.Process(target=dimmer, args=(dim_red, CMD_IO1))
         p_red.start()

@@ -1,6 +1,5 @@
 import sys
 import time
-
 import smbus
 
 if len(sys.argv) < 2:

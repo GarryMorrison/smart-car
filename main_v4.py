@@ -273,11 +273,10 @@ class ActiveMap():
     def __init__(self, name, width, val, maxi, mini, xpos, ypos, action=None):
         self.width = width
         self.val = val  # start value
-        self.maxi = maxi  # maximum at slider position right
-        self.mini = mini  # minimum at slider position left
+        self.maxi = maxi  # maximum at position right
+        self.mini = mini  # minimum at position left
         self.xpos = xpos  # x-location on screen
         self.ypos = ypos  # y-location on screen
-        # self.surf = pygame.surface.Surface((100, 50))
         self.hit = False  # the hit attribute indicates slider movement due to mouse interaction
         self.call_back = action
 
@@ -285,9 +284,7 @@ class ActiveMap():
         s = w // 10  # step size
         c = w // 2  # center
         self.surface = pygame.surface.Surface((w + 50, w + 50))
-        # self.rect = self.surface.get_rect()
         self.rect = pygame.Rect(xpos, ypos, xpos + w, ypos + w)
-        # print(self.rect)
         self.surface.fill(WHITE)
         pygame.draw.rect(self.surface, GREY, [0, 0, w, w], 0)
         pygame.draw.rect(self.surface, BLACK, [0, 0, w, w], 1)
@@ -324,8 +321,8 @@ class ActiveMap():
 
         # current-location button:
         # num_map(value, fromLow, fromHigh, toLow, toHigh)
-        xpos = num_map(self.val[0], 0, 180, 0, self.width)
-        ypos = num_map(self.val[1], 0, 180, 0, self.width)
+        xpos = num_map(self.val[0], self.mini, self.maxi, 0, self.width)
+        ypos = num_map(self.val[1], self.mini, self.maxi, 0, self.width)
         self.button_rect = self.button_surf.get_rect(center=(xpos, ypos))
         surface.blit(self.button_surf, self.button_rect)
         self.button_rect.move_ip(self.xpos, self.ypos)  # move of button box to correct screen position
@@ -340,10 +337,10 @@ class ActiveMap():
         screen.blit(surface, (self.xpos, self.ypos))
 
     def move(self):
-        self.val[0] = num_map(pygame.mouse.get_pos()[0] - self.xpos, 0, self.width, 0, 180)
-        self.val[1] = num_map(pygame.mouse.get_pos()[1] - self.ypos, 0, self.width, 0, 180)
-        self.val[0] = int(constrain(self.val[0], 0, 180))
-        self.val[1] = int(constrain(self.val[1], 0, 180))
+        self.val[0] = num_map(pygame.mouse.get_pos()[0] - self.xpos, 0, self.width, self.mini, self.maxi)
+        self.val[1] = num_map(pygame.mouse.get_pos()[1] - self.ypos, 0, self.width, self.mini, self.maxi)
+        self.val[0] = int(constrain(self.val[0], self.mini, self.maxi))
+        self.val[1] = int(constrain(self.val[1], self.mini, self.maxi))
 
         self.txt_surf_x = self.font.render(str(self.val[0]), 1, BLACK)
         self.txt_surf_y = self.font.render(str(self.val[1]), 1, BLACK)
@@ -830,7 +827,7 @@ if __name__ == '__main__':
         if cam.query_image():
             img = cam.get_image()
     img = pygame.transform.scale(img, camera_size)
-    if hflip or vflip:
+    if hflip or vflip and have_camera:            # don't flip the image if it is static.
         img = pygame.transform.flip(img, hflip, vflip)
     screen.blit(img, (2, 2))
 

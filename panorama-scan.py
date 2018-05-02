@@ -21,7 +21,7 @@
 # Author: Garry Morrison
 # email: garry.morrison _at_ gmail.com
 # Date: 27/4/2018
-# Update: 29/4/2018
+# Update: 30/4/2018
 # Copyright: GPLv3
 #
 # Usage:
@@ -64,7 +64,10 @@ pygame.init()
 
 # set the desired camera size here:
 # camera_size = (320, 240)
-camera_size = (640, 480)
+# camera_size = (640, 480)
+# camera_size = (800, 600)
+camera_size = (1024, 768)
+
 
 # camera controls:
 hflip = True
@@ -88,8 +91,8 @@ except ImportError:
     sys.exit(-1)
 
 # number of images to average over:
-count = 20
-# count = 1
+# count = 20
+count = 1
 
 # sleep time, in seconds, between changing angle and taking a photo:
 SLEEP_TIME = 1
@@ -225,6 +228,16 @@ def create_simm_average_camera_image(count):
     return frame
 
 
+# there is a bug lurking somewhere, where the returned image is either all white, or an invalid image.
+# Maybe if we take a bunch of images, and then return the last one, we can side-step it??
+# BTW, with outside images, seems we don't need to simm-average them.
+# Only inside images, where there are lower light levels, have the extra noise that require image averaging.
+def get_single_image():
+    img = [cam.get_image() for _ in range(10)]
+    img = pygame.transform.flip(img[-1], hflip, vflip)
+    return img
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
         print('please provide a destination directory for the images')
@@ -293,13 +306,18 @@ if __name__ == '__main__':
 
         # let the camera warm up to current angle:
         time.sleep(SLEEP_TIME)
-        img = create_simm_average_camera_image(count)
+        # img = create_simm_average_camera_image(count)
+        img = get_single_image()
         ## cv2.imshow(str(angle), img)
         # cv2.imwrite(dest_dir + '/' + str(angle) + '.png', img)
         pygame.image.save(img, dest_dir + '/' + str(angle) + '.png')
 
     # return camera to 90 degree position:
     write_servo(CMD_SERVO2, 90)
+
+    # tidy up:
+    cam.stop()
+    pygame.quit()
 
     # beep on finish:
     if beep:
