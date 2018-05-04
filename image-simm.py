@@ -16,7 +16,21 @@ import numpy as np
 import cv2
 
 
-def image_simm(im1, im2):
+def image_simm_unscaled(im1, im2):
+    # convert all to float64:
+    fim1 = np.float64(im1)
+    fim2 = np.float64(im2)
+
+    wf = np.sum(np.absolute(fim1))
+    wg = np.sum(np.absolute(fim2))
+    wfg = np.sum(np.absolute(fim1 - fim2))
+
+    if wf == 0 and wg == 0:
+        return 0
+    return (wf + wg - wfg) / (2 * max(wf, wg))
+
+
+def image_simm_scaled(im1, im2):
     # convert all to float64:
     fim1 = np.float64(im1)
     fim2 = np.float64(im2)

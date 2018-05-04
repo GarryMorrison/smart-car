@@ -10,4 +10,4 @@ The code is GPLv3 so feel free to modify, and share.
 More features planned, as I think of them.
 Enjoy!
 
-
+Update: I now have an associated blog, where I discuss my code: https://thesmartcarproject.blogspot.com.au/

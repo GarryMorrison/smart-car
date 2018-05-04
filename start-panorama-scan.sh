@@ -21,9 +21,12 @@ dt=$(date '+%d-%m-%Y--%H:%M:%S')
 echo $dt >> /home/pi/panorama/panorama-log.txt
 
 if [ $online -eq 1 ]; then
-  # if network down, then auto run our panorama-scan:
-  echo "network down" >> /home/pi/panorama/panorama-log.txt
-  /usr/bin/python3 /home/pi/panorama/panorama-scan.py /home/pi/panorama/panorama-images
+    # if network down, then auto run our panorama-scan:
+    echo "network down" >> /home/pi/panorama/panorama-log.txt
+    /usr/bin/python3 /home/pi/panorama/panorama-scan.py /home/pi/panorama/panorama-images
+
+    # shut down:
+    sudo shutdown -h now
 else
-  echo "network up" >> /home/pi/panorama/panorama-log.txt
+    echo "network up" >> /home/pi/panorama/panorama-log.txt
 fi

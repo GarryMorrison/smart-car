@@ -21,7 +21,7 @@
 # Author: Garry Morrison
 # email: garry.morrison _at_ gmail.com
 # Date: 27/4/2018
-# Update: 30/4/2018
+# Update: 4/5/2018
 # Copyright: GPLv3
 #
 # Usage:
@@ -54,10 +54,6 @@ except ImportError:
     print('failed to import smbus')
     sys.exit(-1)
 
-
-# set up camera using opencv:
-# now deprecated, instead we are using pygame, since it is installed by default on the raspberry pi.
-# cap = cv2.VideoCapture(0)
 
 # start up pygame:
 pygame.init()
@@ -97,13 +93,18 @@ count = 1
 # sleep time, in seconds, between changing angle and taking a photo:
 SLEEP_TIME = 1
 
-# min similarity for image to be considered valid during image averaging:
+# min similarity for image to be considered valid during image similarity averaging:
 IMAGE_SIMILARITY = 0.75
 
 # panorama settings:
 min_angle = 0
 max_angle = 180
 step_angle = 5
+
+# image capture function:
+get_image = get_single_image
+# get_image = create_average_camera_image
+# get_image = create_simm_average_camera_image
 
 
 # define IO constants:
@@ -146,11 +147,8 @@ def write_servo(cmd, value):
 
 # assumes, for now, there is no movement at all while trying to take the average:
 # hrmmm.. still has ghost effect. Need to filter using image-simm()
-# NB: opencv version. ie, we haven't written a pygame version of this function.
-def create_average_camera_image(count):
-    # let the camera warm up to current angle:
-    time.sleep(10)
-
+# NB: opencv version.
+def opencv_create_average_camera_image(count):
     # create a list of first count frames:
     img = [cap.read()[1] for i in range(count)]
 
@@ -170,6 +168,33 @@ def create_average_camera_image(count):
     int_mean_img = np.uint8(np.clip(mean_img, 0, 255))
 
     return int_mean_img
+
+
+# pygame version: code untested!
+def create_average_camera_image(count):
+    rot_img = []
+    for _ in range(count):
+        img = cam.get_image()
+        img = pygame.surfarray.array3d(img)
+        rot_img.append(img)
+
+    # convert all to float64:
+    float_img = [np.float64(i) for i in rot_img]
+
+    # find average of similar images:
+    mean_img = float_img[0]
+    for k in range(1, count):
+        mean_img += float_img[k]
+    mean_img /= count
+    print('we averaged %s images' % count)
+
+    # Convert back to uint8:
+    int_mean_img = np.uint8(np.clip(mean_img, 0, 255))
+
+    # convert back to pygame surface:
+    frame = pygame.surfarray.make_surface(int_mean_img)
+
+    return frame
 
 
 # returns the image similarity of two images:
@@ -198,8 +223,6 @@ def create_simm_average_camera_image(count):
     rot_img = []
     for _ in range(count):
         img = cam.get_image()
-        img = pygame.transform.scale(img, camera_size)
-        img = pygame.transform.flip(img, hflip, vflip)
         img = pygame.surfarray.array3d(img)
         rot_img.append(img)
 
@@ -232,10 +255,9 @@ def create_simm_average_camera_image(count):
 # Maybe if we take a bunch of images, and then return the last one, we can side-step it??
 # BTW, with outside images, seems we don't need to simm-average them.
 # Only inside images, where there are lower light levels, have the extra noise that require image averaging.
-def get_single_image():
+def get_single_image(count):
     img = [cam.get_image() for _ in range(10)]
-    img = pygame.transform.flip(img[-1], hflip, vflip)
-    return img
+    return img[-1]
 
 
 if __name__ == '__main__':
@@ -306,10 +328,11 @@ if __name__ == '__main__':
 
         # let the camera warm up to current angle:
         time.sleep(SLEEP_TIME)
-        # img = create_simm_average_camera_image(count)
-        img = get_single_image()
-        ## cv2.imshow(str(angle), img)
-        # cv2.imwrite(dest_dir + '/' + str(angle) + '.png', img)
+
+        # get the image:
+        img = get_image(count)
+        img = pygame.transform.flip(img, hflip, vflip)
+        # img = pygame.transform.scale(img, camera_size)
         pygame.image.save(img, dest_dir + '/' + str(angle) + '.png')
 
     # return camera to 90 degree position:
@@ -324,7 +347,3 @@ if __name__ == '__main__':
         write_reg(CMD_BUZZER, 1000)
         time.sleep(0.2)
         write_reg(CMD_BUZZER, 0)
-
-    # tidy up and quit:
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
